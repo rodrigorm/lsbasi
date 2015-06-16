@@ -8,6 +8,7 @@
  */
 define('T_INTEGER', 'T_INTEGER');
 define('T_PLUS', 'T_PLUS');
+define('T_MINUS', 'T_MINUS');
 define('T_EOF', 'T_EOF');
 
 class Token {
@@ -74,23 +75,31 @@ class Interpreter {
 
         # we expect the current token to be a single-digit integer
         $left = $this->current_token;
-        $this->eat(T_INTEGER);
+        $this->eat([T_INTEGER]);
 
         # we expect the current token to be a '+' token
         $op = $this->current_token;
-        $this->eat(T_PLUS);
+        $this->eat([T_PLUS, T_MINUS]);
 
         # we expect the current token to be a single-digit integer
         $right = $this->current_token;
-        $this->eat(T_INTEGER);
+        $this->eat([T_INTEGER]);
         # after the above call the $this->current is set to
         # T_EOF token
 
-        # at this point T_INTEGER T_PLUS T_INTEGER sequence of tokens
+        # at this point T_INTEGER T_PLUS|T_MINUS T_INTEGER sequence of tokens
         # has been successfully found and the method can just
         # return the result of adding two integers, thus
         # effectively interpreting client input
-        $result = $left->value + $right->value;
+        switch ($op->type)
+        {
+        case T_PLUS:
+            $result = $left->value + $right->value;
+            break;
+        case T_MINUS:
+            $result = $left->value - $right->value;
+            break;
+        }
 
         return $result;
     }
@@ -121,11 +130,17 @@ class Interpreter {
         # integer, create a T_INTEGER token, increment $this->pos
         # index to point to the next character after the digit,
         # and return the T_INTEGER token
+
         if (ctype_digit($current_char))
         {
-            $token = new Token(T_INTEGER, intval($current_char));
-            $this->pos += 1;
-            return $token;
+            $value = '';
+            do {
+                $current_char = $text[$this->pos];
+                $value .= $current_char;
+                $this->pos += 1;
+            } while ($this->pos < strlen($text) && ctype_digit($text[$this->pos]));
+
+            return new Token(T_INTEGER, intval($value));
         }
 
         if ($current_char === '+')
@@ -135,16 +150,29 @@ class Interpreter {
             return $token;
         }
 
+        if ($current_char === '-')
+        {
+            $token = new Token(T_MINUS, $current_char);
+            $this->pos += 1;
+            return $token;
+        }
+
+        if ($current_char === ' ')
+        {
+            $this->pos += 1;
+            return $this->get_next_token();
+        }
+
         $this->error();
     }
 
-    private function eat($token_type)
+    private function eat(array $token_types)
     {
         # compare the current token type with the passed token
         # type and if they match then "eat" the current token
         # and assign the next token to the $this->current_token,
         # otherwise raise an exception.
-        if ($this->current_token->type === $token_type)
+        if (in_array($this->current_token->type, $token_types))
         {
             $this->current_token = $this->get_next_token();
         }
